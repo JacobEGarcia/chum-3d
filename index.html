@@ -138,14 +138,14 @@ for(let i=0;i<8;i++){
 const boat=new THREE.Group(); scene.add(boat);
 const hullM=new THREE.MeshStandardMaterial({color:0xd94a2a,roughness:.6});
 {
-  const hull=new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.5,4.6,10,1),hullM);
-  hull.scale.set(1,.55,1); hull.rotation.x=Math.PI/2; hull.position.y=.5; hull.castShadow=true; boat.add(hull);
-  const rim=new THREE.Mesh(new THREE.TorusGeometry(1.25,.14,8,20),new THREE.MeshStandardMaterial({color:0x8a2a15,roughness:.7}));
-  rim.scale.set(1,2.3,1); rim.rotation.x=Math.PI/2; rim.position.y=.95; boat.add(rim);
-  const bench=new THREE.Mesh(new THREE.BoxGeometry(1.8,.12,.5),new THREE.MeshStandardMaterial({color:0xc9a06a,roughness:.8}));
+  const hull=new THREE.Mesh(new THREE.CylinderGeometry(.72,.95,5.2,12,1),hullM);
+  hull.scale.set(1,.5,1); hull.rotation.x=Math.PI/2; hull.position.y=.42; hull.castShadow=true; boat.add(hull);
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(.82,.11,8,24),new THREE.MeshStandardMaterial({color:0x8a2a15,roughness:.7}));
+  rim.scale.set(1,2.9,1); rim.rotation.x=Math.PI/2; rim.position.y=.8; boat.add(rim);
+  const bench=new THREE.Mesh(new THREE.BoxGeometry(1.2,.12,.45),new THREE.MeshStandardMaterial({color:0xc9a06a,roughness:.8}));
   bench.position.set(0,.85,.4); boat.add(bench);
   const crate=new THREE.Mesh(new THREE.BoxGeometry(.7,.5,.5),new THREE.MeshStandardMaterial({color:0x7a5a35,roughness:.85}));
-  crate.position.set(-.5,1.1,-1); crate.castShadow=true; boat.add(crate);
+  crate.position.set(-.35,.95,-1.2); crate.castShadow=true; boat.add(crate);
 }
 // water plane inside the boat
 const bilge=new THREE.Mesh(new THREE.CircleGeometry(1,16),
@@ -164,7 +164,7 @@ bilge.rotation.x=-Math.PI/2; bilge.scale.set(1,2.2,1); bilge.position.y=.35; boa
   hatTop.position.y=1.2; f.add(hatTop);
   const bucket=new THREE.Mesh(new THREE.CylinderGeometry(.14,.11,.2,10),new THREE.MeshStandardMaterial({color:0x4a8aa0,roughness:.6}));
   bucket.position.set(.3,.35,.15); f.add(bucket);
-  f.position.set(.2,1,1.4); boat.add(f);
+  f.position.set(.15,.85,1.5); boat.add(f);
   window._fisher=f;
 }
 
