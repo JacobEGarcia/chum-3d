@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>CHUM - a small boat, a big ocean</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=IBM+Plex+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  html,body{ height:100%; overflow:hidden; background:#06283a; }
+  body{ font-family:'IBM Plex Serif', Georgia, serif; color:#eaf6f4; }
+  #c{ position:fixed; inset:0; display:block; touch-action:none; }
+  .vignette{ position:fixed; inset:0; pointer-events:none; z-index:5;
+    background:radial-gradient(ellipse at 50% 40%, transparent 55%, rgba(4,20,30,.5) 100%); }
+  #hud{ position:fixed; inset:0; z-index:10; pointer-events:none; display:none; }
+  #time{ position:absolute; top:16px; left:50%; transform:translateX(-50%); text-align:center;
+    font-family:'Baloo 2', sans-serif; text-shadow:0 2px 8px rgba(0,0,0,.5); }
+  #time .t{ font-size:clamp(28px,6vw,44px); font-weight:800; color:#fff; }
+  #time .s{ font-family:'IBM Plex Serif', serif; font-size:14px; color:#bfe8e0; font-style:italic; }
+  #waterwrap{ position:absolute; top:20px; right:22px; width:26px; height:120px; border-radius:13px;
+    background:rgba(4,20,30,.55); border:2px solid rgba(255,255,255,.35); overflow:hidden; }
+  #waterfill{ position:absolute; bottom:0; left:0; right:0; height:0%;
+    background:linear-gradient(180deg,#3a9ac9,#1a5a8a); transition:height .3s; }
+  #chumcount{ position:absolute; top:22px; left:22px; font-family:'Baloo 2',sans-serif; font-size:18px;
+    color:#ffd98a; text-shadow:0 2px 6px rgba(0,0,0,.5); }
+  #msg{ position:absolute; left:50%; bottom:26%; transform:translateX(-50%); max-width:84vw; text-align:center;
+    font-style:italic; font-size:clamp(17px,3.4vw,23px); color:#fff; text-shadow:0 2px 8px rgba(0,0,0,.7);
+    opacity:0; transition:opacity .3s; }
+  #btns{ position:absolute; bottom:calc(16px + env(safe-area-inset-bottom)); left:0; right:0;
+    display:flex; gap:14px; justify-content:center; pointer-events:auto; }
+  button{ font-family:'Baloo 2', sans-serif; font-weight:800; cursor:pointer; color:#06283a;
+    background:#ffd98a; border:none; padding:14px 26px; font-size:16px; letter-spacing:.06em; border-radius:3px; }
+  #bail{ background:#8adff0; }
+  button.held{ filter:brightness(.85); }
+  .card{ position:fixed; inset:0; z-index:20; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; text-align:center; padding:28px;
+    background:radial-gradient(ellipse at 50% 38%, rgba(8,50,70,.92), rgba(3,14,22,.97) 78%); }
+  .card h1{ font-family:'Baloo 2', sans-serif; font-weight:800; font-size:clamp(52px,12vw,110px);
+    color:#ffd98a; text-shadow:0 5px 0 #b95a20, 0 0 50px rgba(255,190,90,.25); }
+  .card .sub{ font-style:italic; font-size:clamp(15px,3vw,20px); color:#bfe8e0; margin:10px 0 24px; }
+  .card p{ max-width:560px; font-size:16px; line-height:1.8; color:#a8d4cc; margin-bottom:10px; }
+  .card .go{ margin-top:26px; }
+  .keys{ margin-top:22px; font-size:12px; letter-spacing:.24em; color:#5a94a0; }
+  #endcard{ display:none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="vignette"></div>
+
+<div id="hud">
+  <div id="time"><div class="t" id="clock">0:00</div><div class="s">afloat</div></div>
+  <div id="chumcount">chum: 10</div>
+  <div id="waterwrap"><div id="waterfill"></div></div>
+  <div id="msg"></div>
+  <div id="btns">
+    <button id="chum">TOSS CHUM</button>
+    <button id="bail">BAIL</button>
+  </div>
+</div>
+
+<div class="card" id="titlecard">
+  <h1>CHUM</h1>
+  <div class="sub">a small boat, a big ocean, questionable decisions</div>
+  <p>You have a dinghy, a bucket, and a crate of chum you were explicitly told not to open.
+     You opened it.</p>
+  <p>Toss chum to draw the sharks closer - closer sharks mean bigger scores in the magazine
+     profile you're definitely going to live to give. Every bump ships water. Bail or swim.</p>
+  <button class="go" id="start">Push off</button>
+  <div class="keys">SPACE BAILS &middot; TAP TO TOSS &middot; SURVIVE</div>
+</div>
+
+<div class="card" id="endcard">
+  <h1 id="endtitle">SWIMMING</h1>
+  <div class="sub" id="endsub">the boat was a loaner</div>
+  <p id="endbody"></p>
+  <button class="go" id="again">New boat, same idea</button>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05;
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x9adfe8);
+scene.fog=new THREE.Fog(0x9adfe8, 60, 200);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,.1,400);
+
+scene.add(new THREE.HemisphereLight(0xcff4f8,0x1a5a6a,1.35));
+const sun=new THREE.DirectionalLight(0xfff2d8,1.5);
+sun.position.set(30,50,20); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left=-30;sun.shadow.camera.right=30;sun.shadow.camera.top=30;sun.shadow.camera.bottom=-30;
+scene.add(sun);
+
+// ---------- ocean: animated vertex waves ----------
+const OCEAN=240,SEG=90;
+const oceanGeo=new THREE.PlaneGeometry(OCEAN,OCEAN,SEG,SEG);
+oceanGeo.rotateX(-Math.PI/2);
+const ocean=new THREE.Mesh(oceanGeo,new THREE.MeshStandardMaterial({color:0x1a7a96,roughness:.35,metalness:.15}));
+scene.add(ocean);
+function waveH(x,z,t){
+  return Math.sin(x*.18+t*1.1)*.5+Math.cos(z*.14+t*.9)*.45+Math.sin((x+z)*.09+t*.6)*.6;
+}
+// distant islands
+for(let i=0;i<3;i++){
+  const a=i/3*Math.PI*2+.5,r=110+Math.random()*40;
+  const isl=new THREE.Mesh(new THREE.ConeGeometry(14+Math.random()*8,10+Math.random()*6,7),
+    new THREE.MeshStandardMaterial({color:0x4a7a5a,roughness:.9}));
+  isl.position.set(Math.cos(a)*r,2,Math.sin(a)*r);
+  scene.add(isl);
+}
+// clouds
+const clouds=[];
+for(let i=0;i<8;i++){
+  const c=new THREE.Group();
+  for(let j=0;j<3;j++){
+    const puff=new THREE.Mesh(new THREE.SphereGeometry(3+Math.random()*2.5,10,8),
+      new THREE.MeshBasicMaterial({color:0xffffff,fog:false}));
+    puff.scale.y=.55; puff.position.set(j*3.5-3.5,Math.random(),Math.random()*2);
+    c.add(puff);
+  }
+  c.position.set((Math.random()-.5)*240,26+Math.random()*14,(Math.random()-.5)*240);
+  scene.add(c); clouds.push(c);
+}
+
+// ---------- the boat ----------
+const boat=new THREE.Group(); scene.add(boat);
+const hullM=new THREE.MeshStandardMaterial({color:0xd94a2a,roughness:.6});
+{
+  const hull=new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.5,4.6,10,1),hullM);
+  hull.scale.set(1,.55,1); hull.rotation.x=Math.PI/2; hull.position.y=.5; hull.castShadow=true; boat.add(hull);
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(1.25,.14,8,20),new THREE.MeshStandardMaterial({color:0x8a2a15,roughness:.7}));
+  rim.scale.set(1,2.3,1); rim.rotation.x=Math.PI/2; rim.position.y=.95; boat.add(rim);
+  const bench=new THREE.Mesh(new THREE.BoxGeometry(1.8,.12,.5),new THREE.MeshStandardMaterial({color:0xc9a06a,roughness:.8}));
+  bench.position.set(0,.85,.4); boat.add(bench);
+  const crate=new THREE.Mesh(new THREE.BoxGeometry(.7,.5,.5),new THREE.MeshStandardMaterial({color:0x7a5a35,roughness:.85}));
+  crate.position.set(-.5,1.1,-1); crate.castShadow=true; boat.add(crate);
+}
+// water plane inside the boat
+const bilge=new THREE.Mesh(new THREE.CircleGeometry(1,16),
+  new THREE.MeshStandardMaterial({color:0x2a6a8a,roughness:.3,transparent:true,opacity:.85}));
+bilge.rotation.x=-Math.PI/2; bilge.scale.set(1,2.2,1); bilge.position.y=.35; boat.add(bilge);
+// the fisherman (a little figure holding a bucket)
+{
+  const f=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(.22,.3,.7,10),new THREE.MeshStandardMaterial({color:0xe8c05a,roughness:.7}));
+  body.position.y=.4; f.add(body);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.2,12,10),new THREE.MeshStandardMaterial({color:0xd9a878,roughness:.7}));
+  head.position.y=.95; f.add(head);
+  const hat=new THREE.Mesh(new THREE.CylinderGeometry(.3,.34,.12,12),new THREE.MeshStandardMaterial({color:0xf4e6c0,roughness:.8}));
+  hat.position.y=1.1; f.add(hat);
+  const hatTop=new THREE.Mesh(new THREE.CylinderGeometry(.18,.2,.16,10),new THREE.MeshStandardMaterial({color:0xf4e6c0,roughness:.8}));
+  hatTop.position.y=1.2; f.add(hatTop);
+  const bucket=new THREE.Mesh(new THREE.CylinderGeometry(.14,.11,.2,10),new THREE.MeshStandardMaterial({color:0x4a8aa0,roughness:.6}));
+  bucket.position.set(.3,.35,.15); f.add(bucket);
+  f.position.set(.2,1,1.4); boat.add(f);
+  window._fisher=f;
+}
+
+// ---------- sharks ----------
+const sharks=[];
+function makeShark(){
+  const s=new THREE.Group();
+  const bodyM=new THREE.MeshStandardMaterial({color:0x5a7a8a,roughness:.5});
+  const body=new THREE.Mesh(new THREE.SphereGeometry(.8,14,10),bodyM);
+  body.scale.set(.7,.55,1.9); s.add(body);
+  const belly=new THREE.Mesh(new THREE.SphereGeometry(.7,12,8),new THREE.MeshStandardMaterial({color:0xd8e8e8,roughness:.6}));
+  belly.scale.set(.6,.4,1.7); belly.position.y=-.18; s.add(belly);
+  const fin=new THREE.Mesh(new THREE.ConeGeometry(.22,.7,4),bodyM);
+  fin.scale.z=.4; fin.position.set(0,.62,.1); s.add(fin);
+  const tail=new THREE.Mesh(new THREE.ConeGeometry(.3,.8,4),bodyM);
+  tail.scale.z=.35; tail.rotation.x=Math.PI/2; tail.position.z=1.7; s.add(tail);
+  for(const sd of [-1,1]){
+    const eye=new THREE.Mesh(new THREE.SphereGeometry(.07,8,8),new THREE.MeshBasicMaterial({color:0x0a1a22}));
+    eye.position.set(sd*.35,.15,-.85); s.add(eye);
+  }
+  s.visible=false; scene.add(s);
+  return {g:s, active:false, angle:0, r:60, speed:0, bumpCd:0, ph:Math.random()*7};
+}
+for(let i=0;i<7;i++) sharks.push(makeShark());
+
+// ---------- chum pieces + slicks ----------
+const chums=[], slicks=[];
+const chumM=new THREE.MeshStandardMaterial({color:0xa03828,roughness:.8});
+const slickM=new THREE.MeshStandardMaterial({color:0x8a2a1a,roughness:.5,transparent:true,opacity:.35});
+function tossChum(tx,tz){
+  const c=new THREE.Mesh(new THREE.SphereGeometry(.22,10,8),chumM);
+  c.position.set(boat.position.x,2.2,boat.position.z);
+  c.userData={vx:(tx-boat.position.x)*.9, vz:(tz-boat.position.z)*.9, vy:4, state:'flying'};
+  scene.add(c); chums.push(c);
+}
+
+// ---------- audio ----------
+let AC=null,master=null;
+function audio(){
+  if(AC)return;
+  AC=new (window.AudioContext||window.webkitAudioContext)();
+  master=AC.createGain(); master.gain.value=.85; master.connect(AC.destination);
+  const len=44100*2,b=AC.createBuffer(1,len,44100),d=b.getChannelData(0);
+  let l=0; for(let i=0;i<len;i++){ l=l*.96+(Math.random()*2-1)*.04; d[i]=l*2.8; }
+  const s=AC.createBufferSource(); s.buffer=b; s.loop=true;
+  const f=AC.createBiquadFilter(); f.type='lowpass'; f.frequency.value=500;
+  const g=AC.createGain(); g.gain.value=.12;
+  s.connect(f);f.connect(g);g.connect(master); s.start();
+}
+function splash(big){
+  const t=AC.currentTime,len=44100*(big?.5:.25),b=AC.createBuffer(1,len,44100),d=b.getChannelData(0);
+  for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(len*.25));
+  const s=AC.createBufferSource();s.buffer=b;
+  const f=AC.createBiquadFilter();f.type='bandpass';f.frequency.value=900;f.Q.value=.7;
+  const g=AC.createGain();g.gain.value=big?.5:.25;
+  s.connect(f);f.connect(g);g.connect(master);s.start(t);
+}
+function thud(){
+  const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();
+  o.frequency.setValueAtTime(110,t); o.frequency.exponentialRampToValueAtTime(40,t+.18);
+  g.gain.setValueAtTime(.5,t); g.gain.exponentialRampToValueAtTime(.001,t+.25);
+  o.connect(g);g.connect(master);o.start(t);o.stop(t+.28);
+  splash(true);
+}
+function scoop(){
+  const t=AC.currentTime,len=44100*.18,b=AC.createBuffer(1,len,44100),d=b.getChannelData(0);
+  for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.sin(i/len*Math.PI);
+  const s=AC.createBufferSource();s.buffer=b;
+  const f=AC.createBiquadFilter();f.type='bandpass';f.frequency.value=1600;f.Q.value=1.2;
+  const g=AC.createGain();g.gain.value=.22;
+  s.connect(f);f.connect(g);g.connect(master);s.start(t);
+}
+
+// ---------- state ----------
+let started=false,over=false,water=0,chumLeft=10,score=0,elapsed=0;
+const msgEl=document.getElementById('msg'); let msgT=0;
+function say(t,ms=2600){ msgEl.textContent=t; msgEl.style.opacity=1; msgT=ms/1000; }
+const BANTS=['they brought friends. you brought a bucket.','the sharks appreciate the catering','somewhere, a seagull is taking notes','your insurance does not cover this','bold strategy. let\'s see if it pays off'];
+
+const ray=new THREE.Raycaster(), ptr=new THREE.Vector2();
+canvas.addEventListener('pointerdown',e=>{
+  if(!started||over)return;
+  ptr.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);
+  ray.setFromCamera(ptr,camera);
+  const hit=ray.intersectObject(ocean)[0];
+  if(hit&&chumLeft>0){
+    tossChum(hit.point.x,hit.point.z); chumLeft--;
+    document.getElementById('chumcount').textContent='chum: '+chumLeft;
+    splash(false);
+    if(chumLeft===0) say('that was the last of the chum. the sharks notice.');
+  }
+});
+function doBail(){
+  if(!started||over)return;
+  if(water>0){ water=Math.max(0,water-12); scoop();
+    window._fisher.rotation.x=-.4; setTimeout(()=>window._fisher.rotation.x=0,220);
+  }
+}
+document.getElementById('bail').addEventListener('pointerdown',e=>{e.preventDefault();doBail();});
+document.getElementById('chum').addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  if(chumLeft>0){
+    const a=Math.random()*Math.PI*2;
+    tossChum(boat.position.x+Math.cos(a)*9,boat.position.z+Math.sin(a)*9);
+    chumLeft--; document.getElementById('chumcount').textContent='chum: '+chumLeft;
+    splash(false);
+  }
+});
+addEventListener('keydown',e=>{ if(e.code==='Space'){e.preventDefault();doBail();} });
+
+document.getElementById('start').addEventListener('click',()=>{
+  document.getElementById('titlecard').style.display='none';
+  document.getElementById('hud').style.display='block';
+  audio(); started=true;
+  say('tap the water to toss chum. space to bail. good luck.',3200);
+});
+document.getElementById('again').addEventListener('click',()=>{
+  document.getElementById('endcard').style.display='none';
+  water=0; chumLeft=10; score=0; elapsed=0; over=false;
+  document.getElementById('chumcount').textContent='chum: 10';
+  document.getElementById('clock').textContent='0:00';
+  sharks.forEach(s=>{s.active=false;s.g.visible=false;s.r=60;});
+  chums.forEach(c=>scene.remove(c)); chums.length=0;
+  slicks.forEach(s=>scene.remove(s)); slicks.length=0;
+  say('new boat. the crate of chum is full again. obviously.');
+});
+function sink(){
+  over=true; splash(true); splash(true);
+  const m=Math.floor(elapsed/60), s=Math.floor(elapsed%60);
+  document.getElementById('endbody').textContent=
+    'You stayed afloat for '+m+':'+String(s).padStart(2,'0')+' and drew a crowd of '+sharks.filter(x=>x.active).length+
+    ' sharks. The magazine profile will have to be a memorial. The sharks give it five fins.';
+  setTimeout(()=>{document.getElementById('endcard').style.display='flex';},1600);
+}
+
+// ---------- loop ----------
+const clock=new THREE.Clock();
+let bantT=14;
+function tick(){
+  requestAnimationFrame(tick);
+  const dt=Math.min(clock.getDelta(),.05),t=clock.elapsedTime;
+
+  // ocean waves
+  const op=oceanGeo.attributes.position;
+  for(let i=0;i<op.count;i++){
+    op.setY(i,waveH(op.getX(i),op.getZ(i),t));
+  }
+  op.needsUpdate=true; oceanGeo.computeVertexNormals();
+  clouds.forEach((c,i)=>{ c.position.x+=dt*(1+i*.2); if(c.position.x>150)c.position.x=-150; });
+
+  if(started){
+    // boat bobbing + sinking tilt
+    const sinkK=water/100;
+    boat.position.y=waveH(boat.position.x,boat.position.z,t)*.5+.3-sinkK*1.1;
+    boat.rotation.x=Math.sin(t*1.2)*.05+sinkK*.15;
+    boat.rotation.z=Math.sin(t*.9+2)*.06;
+    bilge.scale.set(1-sinkK*.4,2.2-sinkK*.9,1);
+    bilge.position.y=.35+sinkK*.55;
+    bilge.visible=water>2;
+    document.getElementById('waterfill').style.height=water+'%';
+
+    if(!over){
+      elapsed+=dt; score+=dt*(1+sharks.filter(s=>s.active).length*.5);
+      const m=Math.floor(elapsed/60), s=Math.floor(elapsed%60);
+      document.getElementById('clock').textContent=m+':'+String(s).padStart(2,'0');
+      bantT-=dt;
+      if(bantT<=0){ bantT=18+Math.random()*10; if(sharks.some(x=>x.active)) say(BANTS[Math.floor(Math.random()*BANTS.length)]); }
+
+      // chum physics
+      for(let i=chums.length-1;i>=0;i--){
+        const c=chums[i],u=c.userData;
+        if(u.state==='flying'){
+          u.vy-=9*dt;
+          c.position.x+=u.vx*dt; c.position.y+=u.vy*dt; c.position.z+=u.vz*dt;
+          const wy=waveH(c.position.x,c.position.z,t);
+          if(c.position.y<=wy){
+            u.state='floating'; splash(false);
+            const slick=new THREE.Mesh(new THREE.CircleGeometry(1,14),slickM.clone());
+            slick.rotation.x=-Math.PI/2; slick.position.set(c.position.x,wy+.05,c.position.z);
+            slick.userData={life:14};
+            scene.add(slick); slicks.push(slick);
+            // wake a shark
+            const idle=sharks.find(x=>!x.active);
+            if(idle){ idle.active=true; idle.g.visible=true; idle.angle=Math.random()*Math.PI*2; idle.r=55; idle.speed=.25+Math.random()*.15; }
+          }
+        }else{
+          c.position.y=waveH(c.position.x,c.position.z,t)+.1;
+        }
+      }
+      for(let i=slicks.length-1;i>=0;i--){
+        const s=slicks[i]; s.userData.life-=dt;
+        s.scale.setScalar(1+(14-s.userData.life)*.3);
+        s.material.opacity=Math.min(.35,s.userData.life*.05);
+        s.position.y=waveH(s.position.x,s.position.z,t)+.05;
+        if(s.userData.life<=0){ scene.remove(s); slicks.splice(i,1); }
+      }
+      // sharks circle in, bump the boat
+      for(const sh of sharks){
+        if(!sh.active)continue;
+        sh.bumpCd-=dt;
+        const targetR=slicks.length?6+sh.ph*2:16+sh.ph*4;
+        sh.r+=(targetR-sh.r)*dt*.15;
+        sh.angle+=sh.speed*dt*(30/Math.max(sh.r,8));
+        const sx=boat.position.x+Math.cos(sh.angle)*sh.r;
+        const sz=boat.position.z+Math.sin(sh.angle)*sh.r;
+        sh.g.position.set(sx,waveH(sx,sz,t)-.25,sz);
+        sh.g.rotation.y=-sh.angle-Math.PI/2;
+        sh.g.rotation.z=Math.sin(t*2+sh.ph)*.1;
+        // fin breaks surface when far
+        sh.g.position.y+=sh.r>20?-.5:0;
+        const d=Math.hypot(sx-boat.position.x,sz-boat.position.z);
+        if(d<3&&sh.bumpCd<=0){
+          sh.bumpCd=4+Math.random()*3;
+          water=Math.min(100,water+9+Math.random()*6);
+          thud();
+          boat.rotation.z+=.2*(Math.random()-.5);
+          say(['the boat lurches. water sloshes in.','a bump! the bucket better keep up.','that one had intent.'][Math.floor(Math.random()*3)],1800);
+          // occasional chum resupply drifts in
+          if(chumLeft<3&&Math.random()<.4){ chumLeft+=2;
+            document.getElementById('chumcount').textContent='chum: '+chumLeft;
+            say('a chum barrel floats by. you grab it. naturally.'); }
+        }
+      }
+      water=Math.max(0,water-dt*1.1); // slow natural seep-out
+      if(water>=100) sink();
+    }else{
+      boat.position.y-=dt*.6; boat.rotation.x+=dt*.1;
+    }
+  }
+  if(msgT>0){ msgT-=dt; if(msgT<=0) msgEl.style.opacity=0; }
+
+  // camera: slow orbit around boat
+  const ca=t*.06;
+  camera.position.set(boat.position.x+Math.cos(ca)*13, 6+Math.sin(t*.3)*.5, boat.position.z+Math.sin(ca)*13);
+  camera.lookAt(boat.position.x,1,boat.position.z);
+
+  renderer.render(scene,camera);
+}
+tick();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+</script>
+</body>
+</html>
