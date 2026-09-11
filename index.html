@@ -398,7 +398,7 @@ function tick(){
 
   // camera: slow orbit around boat
   const ca=t*.06;
-  camera.position.set(boat.position.x+Math.cos(ca)*13, 6+Math.sin(t*.3)*.5, boat.position.z+Math.sin(ca)*13);
+  camera.position.set(boat.position.x+Math.cos(ca)*9.5, 4.4+Math.sin(t*.3)*.4, boat.position.z+Math.sin(ca)*9.5);
   camera.lookAt(boat.position.x,1,boat.position.z);
 
   renderer.render(scene,camera);
